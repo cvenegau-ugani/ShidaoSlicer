@@ -136,8 +136,8 @@ jobs:
           rm -rf ${{ github.workspace }}/build/universal/OrcaSlicer_dmg/*
           cp -R ${{ github.workspace }}/build/universal/OrcaSlicer/OrcaSlicer.app ${{ github.workspace }}/build/universal/OrcaSlicer_dmg/
           ln -sfn /Applications ${{ github.workspace }}/build/universal/OrcaSlicer_dmg/Applications
-          hdiutil create -volname "OrcaBelt" -srcfolder ${{ github.workspace }}/build/universal/OrcaSlicer_dmg -ov -format UDZO OrcaBelt_Mac_universal_${{ env.ver }}.dmg
-          codesign --deep --force --verbose --options runtime --timestamp --entitlements ${{ github.workspace }}/scripts/disable_validation.entitlements --sign "$CERTIFICATE_ID" OrcaBelt_Mac_universal_${{ env.ver }}.dmg
+          hdiutil create -volname "ShidaoSlicer" -srcfolder ${{ github.workspace }}/build/universal/OrcaSlicer_dmg -ov -format UDZO ShidaoSlicer_Mac_universal_${{ env.ver }}.dmg
+          codesign --deep --force --verbose --options runtime --timestamp --entitlements ${{ github.workspace }}/scripts/disable_validation.entitlements --sign "$CERTIFICATE_ID" ShidaoSlicer_Mac_universal_${{ env.ver }}.dmg
           
           # Create separate OrcaSlicer_profile_validator DMG if the app exists
           if [ -f "${{ github.workspace }}/build/universal/OrcaSlicer/OrcaSlicer_profile_validator.app/Contents/MacOS/OrcaSlicer_profile_validator" ]; then
@@ -151,8 +151,8 @@ jobs:
           
           # Notarize main DMG
           xcrun notarytool store-credentials "notarytool-profile" --apple-id "${{ secrets.APPLE_DEV_ACCOUNT }}" --team-id "${{ secrets.TEAM_ID }}" --password "${{ secrets.APP_PWD }}"
-          xcrun notarytool submit "OrcaBelt_Mac_universal_${{ env.ver }}.dmg" --keychain-profile "notarytool-profile" --wait
-          xcrun stapler staple OrcaBelt_Mac_universal_${{ env.ver }}.dmg
+          xcrun notarytool submit "ShidaoSlicer_Mac_universal_${{ env.ver }}.dmg" --keychain-profile "notarytool-profile" --wait
+          xcrun stapler staple ShidaoSlicer_Mac_universal_${{ env.ver }}.dmg
           
           # Notarize profile validator DMG if it exists
           if [ -f "OrcaSlicer_profile_validator_Mac_universal_${{ env.ver }}.dmg" ]; then
@@ -171,7 +171,7 @@ jobs:
           rm -rf ${{ github.workspace }}/build/universal/OrcaSlicer_dmg/*
           cp -R ${{ github.workspace }}/build/universal/OrcaSlicer/OrcaSlicer.app ${{ github.workspace }}/build/universal/OrcaSlicer_dmg/
           ln -sfn /Applications ${{ github.workspace }}/build/universal/OrcaSlicer_dmg/Applications
-          hdiutil create -volname "OrcaBelt" -srcfolder ${{ github.workspace }}/build/universal/OrcaSlicer_dmg -ov -format UDZO OrcaBelt_Mac_universal_${{ env.ver }}.dmg
+          hdiutil create -volname "ShidaoSlicer" -srcfolder ${{ github.workspace }}/build/universal/OrcaSlicer_dmg -ov -format UDZO ShidaoSlicer_Mac_universal_${{ env.ver }}.dmg
           
           # Create separate OrcaSlicer_profile_validator DMG if the app exists
           if [ -f "${{ github.workspace }}/build/universal/OrcaSlicer/OrcaSlicer_profile_validator.app/Contents/MacOS/OrcaSlicer_profile_validator" ]; then
@@ -186,8 +186,8 @@ jobs:
         if: inputs.os == 'macos-14'
         uses: actions/upload-artifact@v5
         with:
-          name: OrcaBelt_Mac_universal_${{ env.ver }}
-          path: ${{ github.workspace }}/OrcaBelt_Mac_universal_${{ env.ver }}.dmg
+          name: ShidaoSlicer_Mac_universal_${{ env.ver }}
+          path: ${{ github.workspace }}/ShidaoSlicer_Mac_universal_${{ env.ver }}.dmg
 
       - name: Upload OrcaSlicer_profile_validator DMG mac
         if: inputs.os == 'macos-14'
@@ -203,8 +203,8 @@ jobs:
         with:
           upload_url: https://uploads.github.com/repos/OrcaSlicer/OrcaSlicer/releases/137995723/assets{?name,label}
           release_id: 137995723
-          asset_path: ${{ github.workspace }}/OrcaBelt_Mac_universal_${{ env.ver }}.dmg
-          asset_name: OrcaBelt_Mac_universal_nightly.dmg
+          asset_path: ${{ github.workspace }}/ShidaoSlicer_Mac_universal_${{ env.ver }}.dmg
+          asset_name: ShidaoSlicer_Mac_universal_nightly.dmg
           asset_content_type: application/octet-stream
           max_releases: 1 # optional, if there are more releases than this matching the asset_name, the oldest ones are going to be deleted
 
@@ -248,7 +248,7 @@ jobs:
         if: inputs.os == 'windows-latest'
         working-directory: ${{ github.workspace }}/build
         shell: cmd
-        run: '"C:/Program Files/7-Zip/7z.exe" a -tzip OrcaBelt_Windows_${{ env.ver }}_portable.zip ${{ github.workspace }}/build/OrcaSlicer'
+        run: '"C:/Program Files/7-Zip/7z.exe" a -tzip ShidaoSlicer_Windows_${{ env.ver }}_portable.zip ${{ github.workspace }}/build/OrcaSlicer'
 
       - name: Pack PDB
         if: inputs.os == 'windows-latest'
@@ -260,14 +260,14 @@ jobs:
         if: inputs.os == 'windows-latest'
         uses: actions/upload-artifact@v5
         with:
-          name: OrcaBelt_Windows_${{ env.ver }}_portable
+          name: ShidaoSlicer_Windows_${{ env.ver }}_portable
           path: ${{ github.workspace }}/build/OrcaSlicer
 
       - name: Upload artifacts Win installer
         if: inputs.os == 'windows-latest'
         uses: actions/upload-artifact@v5
         with:
-          name: OrcaBelt_Windows_${{ env.ver }}
+          name: ShidaoSlicer_Windows_${{ env.ver }}
           path: ${{ github.workspace }}/build/OrcaSlicer*.exe
 
       - name: Upload artifacts Win PDB
@@ -290,8 +290,8 @@ jobs:
         with:
           upload_url: https://uploads.github.com/repos/OrcaSlicer/OrcaSlicer/releases/137995723/assets{?name,label}
           release_id: 137995723
-          asset_path: ${{ github.workspace }}/build/OrcaBelt_Windows_${{ env.ver }}_portable.zip
-          asset_name: OrcaBelt_Windows_nightly_portable.zip
+          asset_path: ${{ github.workspace }}/build/ShidaoSlicer_Windows_${{ env.ver }}_portable.zip
+          asset_name: ShidaoSlicer_Windows_nightly_portable.zip
           asset_content_type: application/x-zip-compressed
           max_releases: 1
 
@@ -301,8 +301,8 @@ jobs:
         with:
           upload_url: https://uploads.github.com/repos/OrcaSlicer/OrcaSlicer/releases/137995723/assets{?name,label}
           release_id: 137995723
-          asset_path: ${{ github.workspace }}/build/OrcaBelt_Windows_Installer_${{ env.ver }}.exe
-          asset_name: OrcaBelt_Windows_Installer_nightly.exe
+          asset_path: ${{ github.workspace }}/build/ShidaoSlicer_Windows_Installer_${{ env.ver }}.exe
+          asset_name: ShidaoSlicer_Windows_Installer_nightly.exe
           asset_content_type: application/x-msdownload
           max_releases: 1
 
@@ -334,8 +334,11 @@ jobs:
           # build_appimage.sh.in produces OrcaBelt_Linux_V<ver>.AppImage because
           # SLIC3R_APP_KEY=OrcaBelt (see version.inc). Source name must match
           # what build_appimage.sh.in actually emits.
-          mv -n ./build/OrcaBelt_Linux_V${{ env.ver_pure }}.AppImage ./build/OrcaBelt_Linux_AppImage${{ env.ubuntu-ver-str }}_${{ env.ver }}.AppImage
-          chmod +x ./build/OrcaBelt_Linux_AppImage${{ env.ubuntu-ver-str }}_${{ env.ver }}.AppImage
+          # build_appimage.sh.in produces OrcaBelt_Linux_V<ver>.AppImage from
+          # SLIC3R_APP_KEY (config-path contract — kept stable for compat).
+          # Renamed here to ShidaoSlicer_* for user-facing release artifacts.
+          mv -n ./build/OrcaBelt_Linux_V${{ env.ver_pure }}.AppImage ./build/ShidaoSlicer_Linux_AppImage${{ env.ubuntu-ver-str }}_${{ env.ver }}.AppImage
+          chmod +x ./build/ShidaoSlicer_Linux_AppImage${{ env.ubuntu-ver-str }}_${{ env.ver }}.AppImage
           tar -cvpf build_tests.tar build/tests
 
         # Use tar because upload-artifacts won't always preserve directory structure
@@ -366,8 +369,8 @@ jobs:
           ubuntu-ver-str: ${{ (inputs.os == 'ubuntu-24.04' && '_Ubuntu2404') || '' }}
         uses: actions/upload-artifact@v5
         with:
-          name: OrcaBelt_Linux_ubuntu_${{ env.ubuntu-ver }}_${{ env.ver }}
-          path: './build/OrcaBelt_Linux_AppImage${{ env.ubuntu-ver-str }}_${{ env.ver }}.AppImage'
+          name: ShidaoSlicer_Linux_ubuntu_${{ env.ubuntu-ver }}_${{ env.ver }}
+          path: './build/ShidaoSlicer_Linux_AppImage${{ env.ubuntu-ver-str }}_${{ env.ver }}.AppImage'
 
       - name: Upload OrcaSlicer_profile_validator Ubuntu
         if: ${{ ! env.ACT && inputs.os == 'ubuntu-20.04' || inputs.os == 'ubuntu-24.04' }}
@@ -386,8 +389,8 @@ jobs:
         with:
           upload_url: https://uploads.github.com/repos/OrcaSlicer/OrcaSlicer/releases/137995723/assets{?name,label}
           release_id: 137995723
-          asset_path: ./build/OrcaBelt_Linux_AppImage${{ env.ubuntu-ver-str }}_${{ env.ver }}.AppImage
-          asset_name: OrcaBelt_Linux_AppImage${{ env.ubuntu-ver-str }}_nightly.AppImage
+          asset_path: ./build/ShidaoSlicer_Linux_AppImage${{ env.ubuntu-ver-str }}_${{ env.ver }}.AppImage
+          asset_name: ShidaoSlicer_Linux_AppImage${{ env.ubuntu-ver-str }}_nightly.AppImage
           asset_content_type: application/octet-stream
           max_releases: 1 # optional, if there are more releases than this matching the asset_name, the oldest ones are going to be deleted
       - name: Deploy Ubuntu release
