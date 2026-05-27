@@ -228,6 +228,7 @@ void MarkdownTip::RunScript(std::string const& script)
 wxWebView* MarkdownTip::CreateTipView(wxWindow* parent)
 {
     wxWebView *tipView = WebView::CreateWebView(parent, "");
+    if (tipView == nullptr) return nullptr;  // belt-jpa: caller handles null
     Bind(wxEVT_WEBVIEW_LOADED, &MarkdownTip::OnLoaded, this);
     Bind(wxEVT_WEBVIEW_TITLE_CHANGED, &MarkdownTip::OnTitleChanged, this);
     Bind(wxEVT_WEBVIEW_ERROR, &MarkdownTip::OnError, this);

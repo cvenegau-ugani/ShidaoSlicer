@@ -1569,12 +1569,16 @@ wxBoxSizer *StatusBasePanel::create_monitoring_page()
     m_media_ctrl->SetMinSize(wxSize(PAGE_MIN_WIDTH, FromDIP(288)));
 
     m_custom_camera_view = WebView::CreateWebView(this, wxEmptyString);
-    m_custom_camera_view->EnableContextMenu(false);
-    Bind(wxEVT_WEBVIEW_NAVIGATING, &StatusBasePanel::on_webview_navigating, this, m_custom_camera_view->GetId());
+    // belt-jpa: env-disabled webview returns null; downstream code must guard.
+    if (m_custom_camera_view) {
+        m_custom_camera_view->EnableContextMenu(false);
+        Bind(wxEVT_WEBVIEW_NAVIGATING, &StatusBasePanel::on_webview_navigating, this, m_custom_camera_view->GetId());
+    }
 
     m_media_play_ctrl = new MediaPlayCtrl(this, m_media_ctrl, wxDefaultPosition, wxSize(-1, FromDIP(40)));
-    m_custom_camera_view->Hide();
-    m_custom_camera_view->Bind(wxEVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED, [this](wxWebViewEvent& evt) {
+    if (m_custom_camera_view) {
+        m_custom_camera_view->Hide();
+        m_custom_camera_view->Bind(wxEVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED, [this](wxWebViewEvent& evt) {
         if (evt.GetString() == "leavepictureinpicture") {
             // When leaving PiP, video gets paused in some cases and toggling play
             // programmatically does not work.
@@ -1583,10 +1587,12 @@ wxBoxSizer *StatusBasePanel::create_monitoring_page()
         else if (evt.GetString() == "enterpictureinpicture") {
             toggle_builtin_camera();
         }
-    });
+        });
+    }
 
     sizer->Add(m_media_ctrl, 1, wxEXPAND | wxALL, 0);
-    sizer->Add(m_custom_camera_view, 1, wxEXPAND | wxALL, 0);
+    if (m_custom_camera_view)
+        sizer->Add(m_custom_camera_view, 1, wxEXPAND | wxALL, 0);
     sizer->Add(m_media_play_ctrl, 0, wxEXPAND | wxALL, 0);
 //    media_ctrl_panel->SetSizer(bSizer_monitoring);
 //    media_ctrl_panel->Layout();

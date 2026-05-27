@@ -237,6 +237,17 @@ public:
 
 wxWebView* WebView::CreateWebView(wxWindow * parent, wxString const & url)
 {
+    // belt-jpa: in-process wxWebView (webkit2gtk-4.1) deterministically SIGSEGVs
+    // in JSC at boot on Ubuntu 26.04 sid even with WebKit 2.52.3 (the version
+    // that was supposed to fix the bug, per memory #788/789). The subprocess
+    // pattern in src/orcabelt_fluidd_host/ already covers PrinterWebView; until
+    // that pattern is generalised to every wxWebView caller, set this env var
+    // to disable in-process webviews entirely. Every callsite handles nullptr.
+    if (getenv("ORCABELT_DISABLE_WEBVIEW") != nullptr) {
+        BOOST_LOG_TRIVIAL(warning) << __FUNCTION__
+            << ": ORCABELT_DISABLE_WEBVIEW=1 — returning nullptr (belt-jpa workaround)";
+        return nullptr;
+    }
 #if wxUSE_WEBVIEW_EDGE
     // Check if a fixed version of edge is present in
     // $executable_path/edge_fixed and use it

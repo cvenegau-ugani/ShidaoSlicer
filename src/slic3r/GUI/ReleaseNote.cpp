@@ -412,6 +412,7 @@ UpdateVersionDialog::~UpdateVersionDialog() {}
 wxWebView* UpdateVersionDialog::CreateTipView(wxWindow* parent)
 {
 	wxWebView* tipView = WebView::CreateWebView(parent, "");
+	if (tipView == nullptr) return nullptr;  // belt-jpa: caller handles null
 	tipView->Bind(wxEVT_WEBVIEW_LOADED, &UpdateVersionDialog::OnLoaded, this);
 	tipView->Bind(wxEVT_WEBVIEW_NAVIGATED, &UpdateVersionDialog::OnTitleChanged, this);
 	tipView->Bind(wxEVT_WEBVIEW_ERROR, &UpdateVersionDialog::OnError, this);
