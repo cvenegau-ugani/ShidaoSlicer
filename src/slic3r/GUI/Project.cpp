@@ -51,16 +51,19 @@ ProjectPanel::ProjectPanel(wxWindow *parent, wxWindowID id, const wxPoint &pos, 
 
     wxBoxSizer* main_sizer = new wxBoxSizer(wxVERTICAL);
 
+    // belt-jpa: when ORCABELT_DISABLE_WEBVIEW is set, CreateWebView returns nullptr.
+    // Continue initialising AuxiliaryPanel anyway so the rest of the panel works
+    // (msw_rescale, update_model_data, EVT_AUXILIARY_DONE all dereference m_auxiliary).
     m_browser = WebView::CreateWebView(this, m_project_home_url);
-    if (m_browser == nullptr) {
-        BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format("load web view of project page failed");
-        return;
+    if (m_browser != nullptr) {
+        //m_browser->Hide();
+        main_sizer->Add(m_browser, wxSizerFlags().Expand().Proportion(1));
+        m_browser->Bind(wxEVT_WEBVIEW_NAVIGATED, &ProjectPanel::on_navigated, this);
+        m_browser->Bind(wxEVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED, &ProjectPanel::OnScriptMessage, this, m_browser->GetId());
+        Bind(wxEVT_WEBVIEW_NAVIGATING, &ProjectPanel::onWebNavigating, this, m_browser->GetId());
+    } else {
+        BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": web view disabled (belt-jpa) — auxiliary panel still wired";
     }
-    //m_browser->Hide();
-    main_sizer->Add(m_browser, wxSizerFlags().Expand().Proportion(1));
-    m_browser->Bind(wxEVT_WEBVIEW_NAVIGATED, &ProjectPanel::on_navigated, this);
-    m_browser->Bind(wxEVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED, &ProjectPanel::OnScriptMessage, this, m_browser->GetId());
-    Bind(wxEVT_WEBVIEW_NAVIGATING, &ProjectPanel::onWebNavigating, this, m_browser->GetId());
 
     Bind(EVT_PROJECT_RELOAD, &ProjectPanel::on_reload, this);
 
@@ -283,7 +286,7 @@ void ProjectPanel::OnScriptMessage(wxWebViewEvent& evt)
 
 void ProjectPanel::show_info_editor(bool show)
 {
-    m_browser->Show(!show);
+    if (m_browser) m_browser->Show(!show);  // belt-jpa: nullable
     m_auxiliary->Show(show);
     Layout();
 }
@@ -451,7 +454,7 @@ wxString ProjectPanel::to_base64(std::string file_path)
 
 void ProjectPanel::RunScript(std::string content)
 {
-    WebView::RunScript(m_browser, content);
+    if (m_browser) WebView::RunScript(m_browser, content);  // belt-jpa
 }
 
 bool ProjectPanel::Show(bool show) 

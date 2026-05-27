@@ -83,15 +83,19 @@ WebViewPanel::WebViewPanel(wxWindow *parent)
     m_info = new wxInfoBar(this);
     topsizer->Add(m_info, wxSizerFlags().Expand());
     // Create the webview
+    // belt-jpa: CreateWebView returns nullptr when ORCABELT_DISABLE_WEBVIEW is set.
+    // Continue panel initialisation regardless so MainFrame's m_webview->RunScript /
+    // SendRecentList / load_url calls find a fully-constructed (but inert) panel.
     m_browser = WebView::CreateWebView(this, url);
     if (m_browser == nullptr) {
-        wxLogError("Could not init m_browser");
-        return;
+        BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ": web view disabled (belt-jpa)";
+    } else {
+        m_browser->Hide();
     }
-    m_browser->Hide();
     SetSizer(topsizer);
 
-    topsizer->Add(m_browser, wxSizerFlags().Expand().Proportion(1));
+    if (m_browser)
+        topsizer->Add(m_browser, wxSizerFlags().Expand().Proportion(1));
 
     // Log backend information
     /* m_browser->GetUserAgent() may lead crash
@@ -241,12 +245,14 @@ void WebViewPanel::load_url(wxString& url)
 {
     this->Show();
     this->Raise();
-    m_url->SetLabelText(url);
+    if (m_url) m_url->SetLabelText(url);
 
     if (wxGetApp().get_mode() == comDevelop)
-        wxLogMessage(m_url->GetValue());
-    m_browser->LoadURL(url);
-    m_browser->SetFocus();
+        wxLogMessage(m_url ? m_url->GetValue() : url);
+    if (m_browser) {  // belt-jpa: nullable when webview disabled
+        m_browser->LoadURL(url);
+        m_browser->SetFocus();
+    }
     UpdateState();
 }
 
@@ -257,6 +263,7 @@ void WebViewPanel::load_url(wxString& url)
 void WebViewPanel::UpdateState()
 {
 #if !BBL_RELEASE_TO_PUBLIC
+    if (!m_browser) return;  // belt-jpa: nullable
     if (m_browser->CanGoBack()) {
         m_button_back->Enable(true);
     }
@@ -286,6 +293,7 @@ void WebViewPanel::UpdateState()
 void WebViewPanel::OnIdle(wxIdleEvent& WXUNUSED(evt))
 {
 #if !BBL_RELEASE_TO_PUBLIC
+    if (!m_browser) return;  // belt-jpa: nullable
     if (m_browser->IsBusy())
     {
         wxSetCursor(wxCURSOR_ARROWWAIT);
