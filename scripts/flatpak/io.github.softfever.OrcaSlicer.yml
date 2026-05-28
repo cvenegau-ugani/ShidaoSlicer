@@ -94,11 +94,9 @@ modules:
       - type: dir
         path: ../../deps
         dest: deps
-
-      - type: file
-        path: patches/0001-Enable-using-a-dark-theme-when-Gnome-dark-style-is-s.patch
-        dest: deps/wxWidgets
-        dest-filename: 0001-flatpak.patch
+      # belt-jpa: 0001-flatpak.patch (dark-theme) removed — now redundant,
+      # merged upstream into Orca-deps-wxWidgets (commit 139e4f2). Re-applying
+      # it broke the build at settings.cpp:1124. See deps/wxWidgets/wxWidgets.cmake.
 
   - name: OrcaSlicer
     buildsystem: simple

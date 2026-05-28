@@ -14,7 +14,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     if (FLATPAK)
         set(_wx_debug_postfix "d")
         set(_wx_shared -DwxBUILD_SHARED=ON -DBUILD_SHARED_LIBS:BOOL=ON)
-        set(_wx_flatpak_patch PATCH_COMMAND ${PATCH_CMD} ${CMAKE_CURRENT_LIST_DIR}/0001-flatpak.patch)
+        # belt-jpa: the 0001-flatpak dark-theme patch is now REDUNDANT — its full
+        # content (UpdatePreferDark, proxy_g_signal, the wxSystemSettingsModule
+        # OnInit/OnExit GDBusProxy color-scheme handling) was merged upstream into
+        # SoftFever/Orca-deps-wxWidgets (commit 139e4f2, "Patch wxWidgets to
+        # automatically select dark theme variant"). Re-applying it failed with
+        # "patch does not apply" at settings.cpp:1124 and broke every Flatpak build
+        # since 2026-05-16. Not applied anymore; dark theme still works (upstream).
     endif ()
 endif()
 
