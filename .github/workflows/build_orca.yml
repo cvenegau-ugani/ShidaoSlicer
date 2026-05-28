@@ -268,7 +268,10 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: ShidaoSlicer_Windows_${{ env.ver }}
-          path: ${{ github.workspace }}/build/OrcaSlicer*.exe
+          # CPACK_PACKAGE_FILE_NAME is now ShidaoSlicer_Windows_Installer_V* —
+          # the old OrcaSlicer*.exe glob matched nothing and the installer
+          # artifact came up empty.
+          path: ${{ github.workspace }}/build/ShidaoSlicer*.exe
 
       - name: Upload artifacts Win PDB
         if: inputs.os == 'windows-latest'
