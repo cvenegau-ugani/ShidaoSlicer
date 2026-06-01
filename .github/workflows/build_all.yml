@@ -189,3 +189,74 @@ jobs:
         asset_name: OrcaSlicer-Linux-flatpak_nightly_${{ matrix.variant.arch }}.flatpak
         asset_content_type: application/octet-stream
         max_releases: 1 # optional, if there are more releases than this matching the asset_name, the oldest ones are going to be deleted
+
+  # belt-hof: publish a rolling "nightly" GitHub Release on the FORK so the
+  # macOS/Windows/Linux packages are downloadable by anyone (the upstream
+  # "Deploy ... nightly" steps are all gated on repo==OrcaSlicer/OrcaSlicer and
+  # point at the upstream release_id, so they never run here). Runs only on a
+  # push to main of this fork, and only if the platform builds succeeded
+  # (implicit success() gate via `needs` + a non-always `if`). Flatpak is
+  # intentionally NOT a dependency: it is allowed to fail without blocking the
+  # release; its bundles are attached only if present.
+  publish_release:
+    name: Publish nightly release
+    needs: [build_linux, build_all]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'tommasobbianchi/ShidaoSlicer' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            version.inc
+      - name: Get the version
+        run: echo "ver=V$(grep 'set(SoftFever_VERSION' version.inc | cut -d '"' -f2)" >> $GITHUB_ENV
+        shell: bash
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: artifacts
+      - name: Assemble release files
+        run: |
+          set -x
+          mkdir -p release
+          # macOS DMG
+          cp artifacts/ShidaoSlicer_Mac_universal_${ver}/*.dmg release/ 2>/dev/null || true
+          # Windows installer (.exe)
+          cp artifacts/ShidaoSlicer_Windows_${ver}/*.exe release/ 2>/dev/null || true
+          # Windows portable: the artifact is an unzipped folder -> zip it
+          if [ -d "artifacts/ShidaoSlicer_Windows_${ver}_portable" ]; then
+            ( cd "artifacts/ShidaoSlicer_Windows_${ver}_portable" \
+              && zip -rq "../../release/ShidaoSlicer_Windows_${ver}_portable.zip" . )
+          fi
+          # Linux AppImage(s) (any ubuntu variant)
+          cp artifacts/ShidaoSlicer_Linux_*/*.AppImage release/ 2>/dev/null || true
+          # Flatpak bundles (only if the flatpak job happened to succeed)
+          cp artifacts/OrcaSlicer-Linux-flatpak_*/*.flatpak release/ 2>/dev/null || true
+          echo "=== release/ ==="; ls -lh release/
+        shell: bash
+      - name: Publish to rolling nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          target_commitish: ${{ github.sha }}
+          name: "ShidaoSlicer Nightly (${{ env.ver }})"
+          prerelease: true
+          fail_on_unmatched_files: false
+          files: release/*
+          body: |
+            Rolling nightly build from the latest `main` (commit ${{ github.sha }}).
+
+            ShidaoSlicer — fork di OrcaSlicer con supporto nativo per stampanti **belt / nastro** (45° inclinato, stile CR-30 / IdeaFormer IR3).
+
+            ## Download
+            | Piattaforma | File |
+            |---|---|
+            | **macOS** (universal) | `ShidaoSlicer_Mac_universal_*.dmg` |
+            | **Windows** (installer) | `ShidaoSlicer_Windows_Installer_*.exe` |
+            | **Windows** (portable) | `ShidaoSlicer_Windows_*_portable.zip` |
+            | **Linux** (AppImage) | `ShidaoSlicer_Linux_AppImage_*.AppImage` |
+
+            > macOS: il DMG non e' firmato/notarizzato — al primo avvio tasto destro → Apri, oppure `xattr -dr com.apple.quarantine /Applications/ShidaoSlicer.app`.
+            > Linux: `chmod +x` sull'AppImage prima di lanciarlo.
