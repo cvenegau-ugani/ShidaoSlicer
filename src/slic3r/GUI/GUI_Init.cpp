@@ -12,6 +12,8 @@
 
 // To show a message box if GUI initialization ends up with an exception thrown.
 #include <wx/msgdlg.h>
+// belt: needed to install a non-GUI wx log target before wxEntry (see GUI_Run).
+#include <wx/log.h>
 
 #include <boost/nowide/iostream.hpp>
 #include <boost/nowide/convert.hpp>
@@ -25,6 +27,16 @@ namespace GUI {
 
 int GUI_Run(GUI_InitParams &params)
 {
+    // belt-native-wayland: install a non-GUI log target BEFORE wxEntry(). During
+    // wxWidgets startup, wxApp initialization flushes any buffered log messages
+    // (wxLog::SetActiveTarget -> wxLogGui::Flush) and the default GUI target shows
+    // them in a wxMessageBox. On native Wayland that message box's
+    // wxTopLevelWindowGTK destructor dereferences a NULL GTK instance and aborts,
+    // killing the app at startup (which is why upstream forces GDK_BACKEND=x11).
+    // Routing the early flush to stderr avoids the modal entirely; GUI_App::OnInit
+    // later installs the wxBoostLog target as usual, so nothing else changes.
+    wxLog::SetActiveTarget(new wxLogStderr());
+
 #if __APPLE__
     // On OSX, we use boost::process::spawn() to launch new instances of PrusaSlicer from another PrusaSlicer.
     // boost::process::spawn() sets SIGCHLD to SIGIGN for the child process, thus if a child PrusaSlicer spawns another
