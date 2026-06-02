@@ -7,6 +7,8 @@
 #include <cstdarg>
 #include <stdio.h>
 #include <filesystem>
+#include <thread>
+#include <chrono>
 
 #include "format.hpp"
 #include "Platform.hpp"
@@ -625,7 +627,23 @@ namespace WindowsSupport
 std::error_code rename_file(const std::string &from, const std::string &to)
 {
 #ifdef _WIN32
-	return WindowsSupport::rename(from, to);
+	// Windows: MoveFileEx (inside WindowsSupport::rename) can transiently fail with
+	// ERROR_ACCESS_DENIED / ERROR_SHARING_VIOLATION when antivirus (e.g. Windows
+	// Defender real-time scan) or a cloud-sync client (OneDrive/Dropbox) momentarily
+	// holds a lock on the just-written source or the destination file. That is the
+	// cause of the "Failed to rename the output G-code file ... Is <file>.tmp locked?"
+	// export error. Retry with a short backoff so a transient lock clears instead of
+	// failing the whole slice export (~3 s worst case before giving up).
+	std::error_code ec;
+	for (int attempt = 0; ; ++ attempt) {
+		ec = WindowsSupport::rename(from, to);
+		if (! ec || attempt >= 12)
+			break;
+		BOOST_LOG_TRIVIAL(warning) << boost::format("rename_file: %1% -> %2% failed (%3%), retry %4%/12")
+			% from % to % ec.message() % (attempt + 1);
+		std::this_thread::sleep_for(std::chrono::milliseconds(250));
+	}
+	return ec;
 #else
 	boost::nowide::remove(to.c_str());
 	return std::make_error_code(static_cast<std::errc>(boost::nowide::rename(from.c_str(), to.c_str())));
