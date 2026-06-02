@@ -285,35 +285,41 @@ UpdateVersionDialog::UpdateVersionDialog(wxWindow *parent)
 
     //webview
     m_vebview_release_note = CreateTipView(m_simplebook_release_note);
-    m_vebview_release_note->SetBackgroundColour(wxColour(0xF8, 0xF8, 0xF8));
-    m_vebview_release_note->SetSize(wxSize(FromDIP(560), FromDIP(430)));
-    m_vebview_release_note->SetMinSize(wxSize(FromDIP(560), FromDIP(430)));
-    //m_vebview_release_note->SetMaxSize(wxSize(FromDIP(560), FromDIP(430)));
-    m_vebview_release_note->Bind(wxEVT_WEBVIEW_NAVIGATING,[=](wxWebViewEvent& event){
-        static bool load_url_first = false;
-        if(load_url_first){
-            // Orca: not used in Orca Slicer
-            // wxLaunchDefaultBrowser(url_line);
-            event.Veto();
-        }else{
-            load_url_first = true;
-        }
-        
-    });
+    // belt-j6s: CreateTipView() returns nullptr when the in-process wxWebView is
+    // unavailable (ORCABELT_DISABLE_WEBVIEW workaround, or a webkit failure). The
+    // dialog shows its version text + buttons via the scrolled-window page below, so
+    // the webview is optional — guard every use instead of dereferencing null, which
+    // was a SIGSEGV in this constructor as soon as the version check offered an update.
+    if (m_vebview_release_note != nullptr) {
+        m_vebview_release_note->SetBackgroundColour(wxColour(0xF8, 0xF8, 0xF8));
+        m_vebview_release_note->SetSize(wxSize(FromDIP(560), FromDIP(430)));
+        m_vebview_release_note->SetMinSize(wxSize(FromDIP(560), FromDIP(430)));
+        m_vebview_release_note->Bind(wxEVT_WEBVIEW_NAVIGATING,[=](wxWebViewEvent& event){
+            static bool load_url_first = false;
+            if(load_url_first){
+                // Orca: not used in Orca Slicer
+                // wxLaunchDefaultBrowser(url_line);
+                event.Veto();
+            }else{
+                load_url_first = true;
+            }
+        });
 
-	fs::path ph(data_dir());
-	ph /= "resources/tooltip/releasenote.html";
-	if (!fs::exists(ph)) {
-		ph = resources_dir();
-		ph /= "tooltip/releasenote.html";
-	}
-	auto url = ph.string();
-	std::replace(url.begin(), url.end(), '\\', '/');
-	url = "file:///" + url;
-    m_vebview_release_note->LoadURL(from_u8(url));
+        fs::path ph(data_dir());
+        ph /= "resources/tooltip/releasenote.html";
+        if (!fs::exists(ph)) {
+            ph = resources_dir();
+            ph /= "tooltip/releasenote.html";
+        }
+        auto url = ph.string();
+        std::replace(url.begin(), url.end(), '\\', '/');
+        url = "file:///" + url;
+        m_vebview_release_note->LoadURL(from_u8(url));
+    }
 
     m_simplebook_release_note->AddPage(m_scrollwindows_release_note, wxEmptyString, false);
-    m_simplebook_release_note->AddPage(m_vebview_release_note, wxEmptyString, false);
+    if (m_vebview_release_note != nullptr)
+        m_simplebook_release_note->AddPage(m_vebview_release_note, wxEmptyString, false);
 
 
 
@@ -464,7 +470,8 @@ bool UpdateVersionDialog::ShowReleaseNote(std::string content)
 
 void UpdateVersionDialog::RunScript(std::string script)
 {
-    WebView::RunScript(m_vebview_release_note, script);
+    if (m_vebview_release_note != nullptr)  // belt-j6s: webview may be disabled/unavailable
+        WebView::RunScript(m_vebview_release_note, script);
     script.clear();
 }
 
