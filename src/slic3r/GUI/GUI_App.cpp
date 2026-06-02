@@ -5879,27 +5879,34 @@ bool GUI_App::load_language(wxString language, bool initial)
         //}
     }
 
-    if (! wxLocale::IsAvailable(language_info->Language)) {
-    	// Loading the language dictionary failed.
-    	wxString message = "Switching Orca Slicer to language " + language_info->CanonicalName + " failed.";
-#if !defined(_WIN32) && !defined(__APPLE__)
-        // likely some linux system
-        message += "\nYou may need to reconfigure the missing locales, likely by running the \"locale-gen\" and \"dpkg-reconfigure locales\" commands.\n";
-#endif
-        if (initial)
-        	message + "\n\nApplication will close.";
-        wxMessageBox(message, "Orca Slicer - Switching language failed", wxOK | wxICON_ERROR);
-        if (initial)
-			std::exit(EXIT_FAILURE);
-		else
-			return false;
+    // belt-1cv: the POSIX locale for the requested UI language is frequently NOT
+    // generated on the host an AppImage runs on (e.g. UI=English but the user only
+    // has it_IT installed). Upstream treated that as fatal — an error box plus
+    // std::exit(EXIT_FAILURE) on first run — so the AppImage closed immediately on a
+    // language/locale mismatch. The UI translation catalog (language_dict) ships with
+    // the app and loads via wxTranslations regardless of installed system locales;
+    // only wxLocale::Init() (LC_* number/date formatting) needs a generated locale.
+    // So instead of bailing out, keep the translation and initialise wxLocale with any
+    // available fallback locale, so the app still starts and stays translated.
+    wxLanguage locale_language = wxLanguage(language_info->Language);
+    if (! wxLocale::IsAvailable(locale_language)) {
+        BOOST_LOG_TRIVIAL(warning) << boost::format(
+            "Locale for language %1% is not installed on this system; keeping the UI "
+            "translation and using a fallback locale for number/date formatting.")
+            % language_info->CanonicalName.ToUTF8().data();
+        if (m_language_info_system && wxLocale::IsAvailable(wxLanguage(m_language_info_system->Language)))
+            locale_language = wxLanguage(m_language_info_system->Language);
+        else
+            // wxLANGUAGE_DEFAULT initialises from the environment / "C" and never fails,
+            // so the application always starts even on a system with no usable locales.
+            locale_language = wxLANGUAGE_DEFAULT;
     }
 
     // Release the old locales, create new locales.
     //FIXME wxWidgets cause havoc if the current locale is deleted. We just forget it causing memory leaks for now.
     m_wxLocale.release();
     m_wxLocale = Slic3r::make_unique<wxLocale>();
-    m_wxLocale->Init(language_info->Language);
+    m_wxLocale->Init(locale_language);
     // Override language at the active wxTranslations class (which is stored in the active m_wxLocale)
     // to load possibly different dictionary, for example, load Czech dictionary for Slovak language.
     wxTranslations::Get()->SetLanguage(language_dict);
