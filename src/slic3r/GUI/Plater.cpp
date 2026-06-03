@@ -15678,12 +15678,42 @@ void Plater::reslice()
     // mode: 0=skip, 1=full (overhang supports + keel wedge), 2=keel-only.
     const int belt_mode = belt_supports_preprocess_mode(*this);
     if (belt_mode != 0) {
+        bool preprocess_ok = false;
         try {
-            belt_supports_inject_volumes(*this, /*keel_only=*/belt_mode == 2);
+            preprocess_ok = belt_supports_inject_volumes(*this, /*keel_only=*/belt_mode == 2);
         } catch (const std::exception& e) {
             belt_supports_log(std::string("EXCEPTION: ") + e.what());
         } catch (...) {
             belt_supports_log("EXCEPTION: unknown");
+        }
+        if (!preprocess_ok) {
+            // belt-safety: the belt support pre-processor is REQUIRED here (the
+            // user enabled supports, or a keel wedge is needed) but it FAILED —
+            // most often because its Python deps (numpy/scipy/trimesh) are missing
+            // on the user's machine. We must NEVER fall through to Orca's native
+            // support generator: it emits virtual-space columns that fail gate R7
+            // and render with Y/Z swapped. So disable native support on every
+            // object (no unsafe supports get produced), strip any stale injection,
+            // and BLOCK the slice with a clear, actionable error instead of
+            // silently shipping a broken belt print.
+            for (ModelObject* o : this->model().objects) {
+                if (!o) continue;
+                o->config.set_key_value("enable_support", new ConfigOptionBool(false));
+                belt_strip_injected_support_volumes(o);
+            }
+            belt_supports_log("ABORT slice: preprocessor required but failed; native support disabled, user notified");
+            wxMessageBox(
+                _L("Belt support pre-processing failed.\n\n"
+                   "The model-space support generator (support_preprocess.py) could not run, "
+                   "so supports were NOT generated. The slice was stopped to avoid producing "
+                   "unsafe belt supports — Orca's built-in support is not compatible with belt "
+                   "geometry.\n\n"
+                   "This is usually a missing Python dependency. Install them and slice again:\n"
+                   "    python3 -m pip install --user numpy scipy trimesh\n\n"
+                   "See the application log (search \"BELT_SUPPORTS\") for the exact error."),
+                _L("Belt supports — preprocessor failed"),
+                wxOK | wxICON_ERROR, this);
+            return;
         }
     } else if (!this->model().objects.empty()
                && belt_has_injected_support_volumes(this->model().objects[0])) {
