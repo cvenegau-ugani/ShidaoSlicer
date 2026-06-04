@@ -96,6 +96,9 @@ jobs:
 # NOTE: on macOS the runner is arm64, so the frozen helper is arm64-only even
 # though the .app is universal — an improvement for Apple Silicon users (the
 # majority); Intel Macs fall back to the python3 path as before.
+# The smoke test below runs `--help`; support_preprocess.py forces UTF-8 stdout
+# at startup so this (and the slicer's captured runtime output) never dies with
+# UnicodeEncodeError on Windows' cp1252 console (belt-z96).
       - name: Setup Python for support_preprocess freeze
         uses: actions/setup-python@v5
         with:
