@@ -1186,6 +1186,18 @@ int CLI::run(int argc, char **argv)
     // instruct the window manager to fall back to X server mode.
     ::setenv("GDK_BACKEND", "x11", /* replace */ true);
 
+    // belt-wiz: the first-run Setup Wizard (GuideFrame, WebGuideDialog.cpp) is
+    // an in-process wxWebView (webkit2gtk-4.1). On a clean Ubuntu 24.04 desktop
+    // webkit2gtk's DMA-BUF renderer fails to allocate a GBM surface on many
+    // GPU/driver combos (no NVIDIA-newdriver fast path, llvmpipe/software GL,
+    // X11 forwarding, VMs), and the web page renders BLANK while the dialog
+    // stays up — exactly the "wizard frozen / blank / loading" report. The
+    // fluidd subprocess and PrinterWebView already set this per-webview, but
+    // the wizard webview lives in the main process and never got the flag.
+    // Force the simpler shared-memory renderer process-wide before any webview
+    // is created. Mode 0: respect an explicit user override if already set.
+    ::setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1", /* replace */ 0);
+
     // Also on Linux, we need to tell Xlib that we will be using threads,
     // lest we crash when we fire up GStreamer.
     XInitThreads();
