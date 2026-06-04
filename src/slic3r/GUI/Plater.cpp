@@ -15427,22 +15427,53 @@ static int belt_supports_preprocess_mode(Plater& plater)
     return best_mode;
 }
 
-static boost::filesystem::path belt_supports_find_script()
+// belt-z96: the preprocessor can run either as a frozen standalone executable
+// (bundled in distributed builds via PyInstaller — no system Python / numpy /
+// scipy / trimesh required on the end-user machine) or as the raw .py script
+// (source / dev trees, invoked through python3). A BeltSupportRunner carries
+// the resolved path plus whether it is the frozen binary, so the caller knows
+// whether to prefix the command with "python3".
+struct BeltSupportRunner {
+    boost::filesystem::path path;   // frozen executable or .py script
+    bool frozen = false;            // true → invoke directly; false → via python3
+    bool valid() const { return !path.empty(); }
+};
+
+static BeltSupportRunner belt_supports_find_runner()
 {
     namespace fs = boost::filesystem;
+    boost::system::error_code ec;
+
+    // 1. Explicit dev override always wins, and is always the .py script.
     if (const char* env = std::getenv("ORCABELT_VALIDATION_DIR")) {
         if (*env) {
             fs::path p = fs::path(env) / "support_preprocess.py";
-            if (fs::exists(p)) return p;
+            if (fs::exists(p, ec)) return { p, false };
         }
     }
+
+    // 2. PREFER the bundled frozen executable shipped under resources/validation.
+    //    This is what makes belt supports work in AppImage / Windows / macOS
+    //    distributions where the user has no Python toolchain installed.
+#ifdef _WIN32
+    const char* frozen_name = "support_preprocess.exe";
+#else
+    const char* frozen_name = "support_preprocess";
+#endif
+    fs::path frozen = fs::path(Slic3r::resources_dir()) / "validation" / frozen_name;
+    if (fs::exists(frozen, ec) && fs::is_regular_file(frozen, ec))
+        return { frozen, true };
+
+    // 3. Fall back to the .py script (source / dev layout: validation/ is a
+    //    sibling of resources/). Requires Python + numpy/scipy/trimesh.
     fs::path res = fs::path(Slic3r::resources_dir()).parent_path() / "validation" / "support_preprocess.py";
-    if (fs::exists(res)) return res;
+    if (fs::exists(res, ec)) return { res, false };
     fs::path dev = fs::path(Slic3r::resources_dir()).parent_path().parent_path() / "validation" / "support_preprocess.py";
-    if (fs::exists(dev)) return dev;
+    if (fs::exists(dev, ec)) return { dev, false };
+
     // No further hard-coded fallback — set ORCABELT_VALIDATION_DIR env var when
     // running against a source tree from a non-standard location.
-    return fs::path{};
+    return {};
 }
 
 static void belt_supports_log(const std::string& msg)
@@ -15485,11 +15516,14 @@ static bool belt_supports_inject_volumes(Plater& plater, bool keel_only)
 {
     namespace fs = boost::filesystem;
 
-    fs::path script = belt_supports_find_script();
-    if (script.empty()) {
-        belt_supports_log("ERROR: support_preprocess.py not found");
+    BeltSupportRunner runner = belt_supports_find_runner();
+    if (!runner.valid()) {
+        belt_supports_log("ERROR: support_preprocess (frozen exe or .py) not found");
         return false;
     }
+    belt_supports_log(std::string("using ")
+                      + (runner.frozen ? "bundled frozen executable: " : "python3 script: ")
+                      + runner.path.string());
 
     // Strip any stale injected volumes from EVERY object so the preprocessor
     // sees bare models. Multi-object plates need this on every object, not
@@ -15561,13 +15595,22 @@ static bool belt_supports_inject_volumes(Plater& plater, bool keel_only)
         belt_supports_log(std::string("preprocessor extra args:") + extra_args.ToStdString());
     }
 
-    wxString cmd = wxString::Format("python3 \"%s\" \"%s\" -o \"%s\"%s",
-        wxString::FromUTF8(script.string()),
-        wxString::FromUTF8(tmp_in.string()),
-        wxString::FromUTF8(tmp_out.string()),
-        extra_args);
+    // Frozen binary is invoked directly (no interpreter); the .py script needs
+    // python3. The argument list (model -o output [extra]) is identical either way.
+    wxString cmd = runner.frozen
+        ? wxString::Format("\"%s\" \"%s\" -o \"%s\"%s",
+            wxString::FromUTF8(runner.path.string()),
+            wxString::FromUTF8(tmp_in.string()),
+            wxString::FromUTF8(tmp_out.string()),
+            extra_args)
+        : wxString::Format("python3 \"%s\" \"%s\" -o \"%s\"%s",
+            wxString::FromUTF8(runner.path.string()),
+            wxString::FromUTF8(tmp_in.string()),
+            wxString::FromUTF8(tmp_out.string()),
+            extra_args);
     belt_supports_log(std::string("invoking preprocessor (")
-                      + (keel_only ? "keel-only" : "full") + ")");
+                      + (keel_only ? "keel-only" : "full")
+                      + (runner.frozen ? ", frozen" : ", python3") + ")");
     long rc = wxExecute(cmd, wxEXEC_SYNC | wxEXEC_HIDE_CONSOLE);
 
     boost::system::error_code ec;
