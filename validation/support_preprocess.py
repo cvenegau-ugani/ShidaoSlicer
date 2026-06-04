@@ -31,6 +31,18 @@ from pathlib import Path
 import numpy as np
 import trimesh
 
+# belt-z96: this script prints progress with non-ASCII characters (mm², →, ≈,
+# √2). On Windows the default stdout/stderr code page is cp1252, so a bare
+# print() — including argparse's --help — dies with UnicodeEncodeError, which
+# would crash the frozen .exe the moment the slicer captures its output. Force
+# UTF-8 (errors="replace" as a last resort) so the preprocessor is safe on
+# every platform's console/pipe. no-op where stdout is already UTF-8 (Linux/mac).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
