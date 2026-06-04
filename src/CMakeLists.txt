@@ -131,6 +131,22 @@ if (NOT WIN32 AND NOT APPLE)
     set_target_properties(OrcaSlicer PROPERTIES OUTPUT_NAME "orca-slicer")
     set(SLIC3R_APP_CMD "orca-slicer")
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/dev-utils/platform/unix/build_linux_image.sh.in ${CMAKE_CURRENT_BINARY_DIR}/build_linux_image.sh USE_SOURCE_PERMISSIONS @ONLY)
+
+    # belt-nds: prevent statically-linked third-party libs (libpng, libjpeg,
+    # freetype, ...) from being exported into the executable's dynamic symbol
+    # table. The crash backtrace handler links with -rdynamic/-export-dynamic,
+    # which otherwise promotes every static-archive symbol to a global dynamic
+    # symbol. Those symbols then INTERPOSE over the system copies that GTK and
+    # gdk-pixbuf load at runtime: e.g. the system gdk-pixbuf PNG loader (built
+    # against system libpng16 1.6.43 on Ubuntu 24.04) ends up calling our
+    # statically-linked libpng 1.6.35, whose png_struct layout differs ->
+    # heap corruption -> SIGSEGV in __libc_free during gtk_icon_info_load_icon.
+    # On ELF, --exclude-libs marks archive symbols hidden, overriding -rdynamic,
+    # so they bind internally and the system libs are used by GTK as intended.
+    # Our own code lives in libslic3r* archives too, so their frames in the
+    # backtrace_symbols_fd() crash log become address-only; recover names with
+    # `addr2line -e orca-slicer 0x<addr>` (DWARF debug info is unaffected).
+    target_link_options(OrcaSlicer PRIVATE "-Wl,--exclude-libs,ALL")
 endif ()
 
 target_link_libraries(OrcaSlicer libslic3r cereal::cereal)
