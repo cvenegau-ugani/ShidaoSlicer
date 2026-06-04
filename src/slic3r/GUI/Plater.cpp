@@ -15714,6 +15714,16 @@ void Plater::reslice()
         return;
     }
 
+    // belt/Windows: release the memory-mapping the preview's G-code text window
+    // holds on the previous slice's G-code file BEFORE the background process
+    // exports the new one. On Windows a memory-mapped file is locked against
+    // rename, so the export's tmp->final rename fails with
+    // "Failed to rename the output G-code ... permission denied. Is ... locked?"
+    // when re-slicing the same plate. We only drop the file mapping here (not
+    // the 3D toolpaths), so the belt preview stays on screen with no flicker.
+    if (GLCanvas3D* preview_canvas = get_preview_canvas3D())
+        preview_canvas->release_gcode_file_mapping();
+
     // Orca belt: pre-process supports + keel wedge via external script.
     // Re-runs every slice on a stripped-bare model, so toggling the GUI
     // Enable-Supports checkbox between slices correctly adds or removes

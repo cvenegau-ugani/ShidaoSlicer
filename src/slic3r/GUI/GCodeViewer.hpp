@@ -852,6 +852,13 @@ public:
     const std::array<unsigned int,2> &get_layers_z_range() const { return m_layers_z_range; }
 
     const SequentialView& get_sequential_view() const { return m_sequential_view; }
+    // belt/Windows: release the memory-mapping the G-code text window holds on
+    // the sliced G-code file, WITHOUT clearing the 3D toolpaths. On Windows a
+    // memory-mapped file is locked against rename/delete, so the previous
+    // slice's still-mapped G-code blocks the next slice's tmp->final rename
+    // ("permission denied / is locked"). Linux allows renaming a mapped file,
+    // so this only ever bit Windows. Must run before a re-slice exports G-code.
+    void stop_mapping_gcode_file() { m_sequential_view.gcode_window.reset(); }
     void update_sequential_view_current(unsigned int first, unsigned int last);
 
     /* BBS IMSlider */
