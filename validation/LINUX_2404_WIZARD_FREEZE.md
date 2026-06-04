@@ -3,6 +3,12 @@
 **Status:** root cause identified, low-risk fix applied in worktree. **DONE-CONDITIONAL:**
 real Ubuntu-24.04-desktop verification by Marc still required (see "Verification" below).
 
+> **LAYER 1 (blank render)** — fixed by `WEBKIT_DISABLE_DMABUF_RENDERER=1`, commit
+> `8b41a68108`, CONFIRMED on a real VM by Marc (wizard now PAINTS).
+> **LAYER 2 (hangs on "Loading.....")** — NEW downstream problem; see the
+> "Layer 2" section at the bottom of this file. `belt-a00` stays OPEN until the
+> wizard is interactive end-to-end.
+
 **Reporter:** Marc — clean Ubuntu 24.04. App now launches (libpng `-Wl,--exclude-libs,ALL`
 fix, commit `9dee1f965e`), but the first-run **Setup Wizard** window opens and stays
 **frozen / blank / loading**, never becomes interactive.
@@ -145,3 +151,117 @@ Then it is a deeper webkit2gtk-4.1-on-24.04 failure (same family as the JSC SIGS
    subprocess-isolation pattern (generalise it beyond Fluidd), or
 3. Set `ORCABELT_DISABLE_WEBVIEW` for the wizard and give `GuideFrame` a real native
    fallback UI instead of the current empty-dialog early-return at `WebGuideDialog.cpp:130`.
+
+---
+
+## Layer 2 — wizard PAINTS but hangs forever on "Loading....."
+
+After Layer 1's `WEBKIT_DISABLE_DMABUF_RENDERER=1` (CONFIRMED on a real VM by Marc),
+the wizard window now renders, but sits on **"Loading....."** and never becomes
+interactive. The GPU/render half is solved; this is the **C++↔JS handshake never
+completing**.
+
+### The handshake (exact sequence, file:line)
+
+The wizard's first page is the **passive loader** `resources/web/guide/0/index.html`
+(`<div id="LoadTip">Loading……</div>`) with `resources/web/guide/0/load.js`:
+
+```js
+// load.js — the page does NOT request anything; it WAITS to be pushed to.
+function HandleStudio(pVal) {
+    if (pVal['command'] == 'userguide_profile_load_finish') JumpToTarget();  // -> real wizard page
+}
+function JumpToTarget(){ window.open('../'+TargetPage+'/index.html','_self'); }
+```
+
+C++ side (`src/slic3r/GUI/WebGuideDialog.cpp`):
+
+1. `m_browser = WebView::CreateWebView(this, TargetUrl)` — `:128`. URL is
+   `file://…/resources/web/guide/0/index.html?target=N` (`:217`).
+2. `Bind(wxEVT_WEBVIEW_NAVIGATED, &GuideFrame::OnNavigationComplete, …)` — `:169`.
+3. `OnNavigationComplete` (`:301`) — on first completion spawns worker thread
+   `LoadProfileData` (`:305`).
+4. `LoadProfileData` (`:1002`) scans local vendor JSON, builds
+   `{command:"userguide_profile_load_finish"}`, then **injects it into the page**:
+   `wxGetApp().CallAfter([…]{ RunScript("HandleStudio({…})"); })` — `:1081`.
+5. `GuideFrame::RunScript` (`:523`) → `WebView::RunScript` →
+   **`webkit_web_view_run_javascript(...)`** — `src/slic3r/GUI/Widgets/WebView.cpp:378`.
+
+So the load is **C++ pushes, page jumps**. The page never makes a request, so this is
+NOT a JS→C++ bridge dependency for the first load (hypothesis 1 is ruled out for the
+initial hang — the `request_userguide_profile` JS→C++ path at `WebGuideDialog.cpp:401`
+is used by *later* pages, not the loader). No external/CDN/font fetch exists in the
+guide web assets (only a base64-inlined woff in `swiper-bundle.css`), so hypothesis 2
+is ruled out. `resources_dir()` resolves the page correctly (the page paints), so
+hypothesis 4 is ruled out for the stall.
+
+### The stalling point — hypothesis 3 (webkit2gtk bubblewrap sandbox)
+
+**Stall:** the injection in step 4/5 (`WebGuideDialog.cpp:1081` →
+`WebView.cpp:378`) never lands in the WebProcess, so `HandleStudio()` /
+`JumpToTarget()` never fire and the loader stays on "Loading.....".
+
+**Evidence — the codebase already knows this and applies the fix to its OTHER two
+webviews, but never to the wizard:**
+
+| Webview site | DMA-BUF off | **Sandbox off** | Source |
+|---|---|---|---|
+| Fluidd (`orcabelt_fluidd_host`, subprocess) | ✅ | ✅ | `main.cpp` env list (DMABUF + `WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS`) |
+| `PrinterWebView` (in-process fallback) | ✅ | ✅ | `PrinterWebView.cpp:350` |
+| **Setup Wizard (`GuideFrame`)** | ✅ (Layer 1) | ❌ **never** | — |
+
+`PrinterWebView.cpp:349` comments it verbatim: *"Disable WebKit sandbox in child
+(bwrap fails silently in nested forks)"*. Inside webkit2gtk's bwrap sandbox on a clean
+24.04 / AppImage mount, the confined WebProcess can stall on `file://` local-resource
+access and on the JSC bridge that `webkit_web_view_run_javascript` drives — the page
+paints (DMA-BUF fixed in Layer 1) but the injection never completes. This is the single
+most likely cause and it is corroborated by the project's own established pattern.
+
+(Secondary note, not the primary cause: the wizard still runs JSC with JIT enabled,
+whereas the Fluidd subprocess disables all JIT tiers to dodge the deterministic
+`libjavascriptcoregtk +0x191f9fc` SIGSEGV ~2 s after load. The wizard report is a HANG,
+not a crash, so the sandbox — not JSC-JIT — is the primary lever. If the sandbox flag
+alone does not fully fix it, adding `JSC_useJIT=false` etc. is the proven next step.)
+
+### Fix applied (worktree only — not committed)
+
+`src/OrcaSlicer.cpp`, immediately after the existing
+`setenv("WEBKIT_DISABLE_DMABUF_RENDERER","1",0)`:
+
+```cpp
+::setenv("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1", /* replace */ 0);
+```
+
+- `WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS` is the canonical disable variable for
+  webkit2gtk-4.x (since 2.26); **NOT** `WEBKIT_FORCE_SANDBOX`, which does the opposite.
+- Mode `0`: respect an explicit user/launcher override.
+- Linux-only (`__WXGTK__`), once at process start before any webview is created —
+  same site and pattern as the Layer 1 flag.
+- Low blast radius: it only relaxes the WebKit WebProcess sandbox (the project already
+  does this for its other two webviews); does **not** touch the belt transform core or
+  support generation.
+
+### FREE pre-check for Marc (NO rebuild)
+
+Relaunch the **current** AppImage with both flags forced — if the wizard becomes
+interactive (jumps past "Loading....."), Layer 2 is proven and the in-process setenv
+is exactly that, made permanent:
+
+```bash
+WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 \
+  ./ShidaoSlicer_nightly_x86_64.AppImage
+```
+
+If it STILL hangs on "Loading.....", add the JSC-JIT-off levers (the same set the
+Fluidd subprocess uses) to isolate the JSC-crash family from the sandbox:
+
+```bash
+WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 \
+JSC_useJIT=false JSC_useDFGJIT=false JSC_useFTLJIT=false JSC_useBaselineJIT=false \
+  ./ShidaoSlicer_nightly_x86_64.AppImage
+```
+
+### Still DONE-CONDITIONAL
+
+Real Ubuntu-24.04-VM verification by Marc is required. `belt-a00` stays **OPEN** until
+the wizard is interactive end-to-end — "not blank" (Layer 1) is only partial progress.

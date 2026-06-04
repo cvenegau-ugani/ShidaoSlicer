@@ -1198,6 +1198,24 @@ int CLI::run(int argc, char **argv)
     // is created. Mode 0: respect an explicit user override if already set.
     ::setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1", /* replace */ 0);
 
+    // belt-a00 layer 2: the DMA-BUF flag alone makes the wizard PAINT, but it
+    // then hangs forever on "Loading....." — the C++->JS handshake never lands.
+    // GuideFrame's load page (resources/web/guide/0/load.js) is passive: it sits
+    // on "Loading....." until C++ injects HandleStudio({command:
+    // 'userguide_profile_load_finish'}) via webkit_web_view_run_javascript
+    // (WebView.cpp:378), at which point load.js calls JumpToTarget() and the
+    // real wizard page loads. Inside webkit2gtk's bubblewrap (bwrap) sandbox on
+    // a clean 24.04 / AppImage, the confined WebProcess can stall on local
+    // file:// resource access and the JSC bridge injection — so the page paints
+    // but the injection never completes and JumpToTarget() never fires. The
+    // project's two OTHER webviews already disable this sandbox for exactly this
+    // class of failure: PrinterWebView.cpp:350 ("bwrap fails silently in nested
+    // forks") and orcabelt_fluidd_host/main.cpp. The wizard's in-process webview
+    // is the only one that never got it. WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS
+    // is the canonical disable var for webkit2gtk-4.x (NOT WEBKIT_FORCE_SANDBOX,
+    // which does the opposite). Mode 0: respect an explicit user override.
+    ::setenv("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1", /* replace */ 0);
+
     // Also on Linux, we need to tell Xlib that we will be using threads,
     // lest we crash when we fire up GStreamer.
     XInitThreads();
