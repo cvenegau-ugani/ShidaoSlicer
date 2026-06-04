@@ -84,6 +84,62 @@ jobs:
           echo "date: ${{ env.date }} version: ${{ env.ver }}"
         shell: pwsh
 
+# belt-z96: freeze validation/support_preprocess.py into a standalone
+# executable with PyInstaller and drop it into resources/validation/ BEFORE
+# the slicer build. The CMake/AppImage/macOS packaging steps copy the whole
+# resources/ tree into the app payload, so the frozen binary ships with every
+# distributed build. This makes belt supports work on end-user machines that
+# have NO Python / numpy / scipy / trimesh installed. Plater.cpp's
+# belt_supports_find_runner() prefers this binary at runtime and invokes it
+# directly (no python3 prefix); it falls back to the .py script only in
+# source/dev trees. Dep versions are pinned to the set validated in belt-z96.
+# NOTE: on macOS the runner is arm64, so the frozen helper is arm64-only even
+# though the .app is universal — an improvement for Apple Silicon users (the
+# majority); Intel Macs fall back to the python3 path as before.
+      - name: Setup Python for support_preprocess freeze
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Freeze support_preprocess (Linux/macOS)
+        if: inputs.os == 'ubuntu-24.04' || inputs.os == 'ubuntu-20.04' || inputs.os == 'macos-14'
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "pyinstaller==6.20.0" "numpy==2.4.6" "scipy==1.17.1" \
+            "trimesh==4.12.2" "manifold3d==3.5.0" "networkx==3.6.1" "shapely==2.1.2"
+          pyinstaller --onefile --name support_preprocess \
+            --collect-all scipy --collect-all trimesh \
+            --collect-all manifold3d --collect-all networkx \
+            --hidden-import scipy.sparse.csgraph --hidden-import shapely \
+            validation/support_preprocess.py
+          mkdir -p resources/validation
+          cp dist/support_preprocess resources/validation/support_preprocess
+          chmod +x resources/validation/support_preprocess
+          ./resources/validation/support_preprocess --help > /dev/null
+          echo "Frozen support_preprocess bundled into resources/validation/"
+
+      - name: Freeze support_preprocess (Windows)
+        if: inputs.os == 'windows-latest'
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install `
+            "pyinstaller==6.20.0" "numpy==2.4.6" "scipy==1.17.1" `
+            "trimesh==4.12.2" "manifold3d==3.5.0" "networkx==3.6.1" "shapely==2.1.2"
+          pyinstaller --onefile --name support_preprocess `
+            --collect-all scipy --collect-all trimesh `
+            --collect-all manifold3d --collect-all networkx `
+            --hidden-import scipy.sparse.csgraph --hidden-import shapely `
+            validation/support_preprocess.py
+          New-Item -ItemType Directory -Force -Path resources\validation | Out-Null
+          Copy-Item dist\support_preprocess.exe resources\validation\support_preprocess.exe
+          & resources\validation\support_preprocess.exe --help | Out-Null
+          Write-Host "Frozen support_preprocess.exe bundled into resources/validation/"
+
 #   Mac
       - name: Install tools mac
         if: inputs.os == 'macos-14'
