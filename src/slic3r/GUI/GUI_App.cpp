@@ -2101,7 +2101,7 @@ void GUI_App::init_app_config()
     set_log_path_and_level(log_filename, 3);
 #endif
 
-    BOOST_LOG_TRIVIAL(info) << boost::format("gui mode, Current OrcaSlicer Version %1% build %2%") % SoftFever_VERSION % GIT_COMMIT_HASH;
+    BOOST_LOG_TRIVIAL(info) << boost::format("gui mode, Current OrcaSlicer Version %1% build %2% (%3%)") % SoftFever_VERSION % GIT_COMMIT_HASH % ORCABELT_BUILD_TIMESTAMP;
 
     //BBS: remove GCodeViewer as seperate APP logic
 	if (!app_config)

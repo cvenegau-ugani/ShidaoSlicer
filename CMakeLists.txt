@@ -107,6 +107,25 @@ if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
         )
         add_definitions("-DGIT_COMMIT_HASH=\"${GIT_COMMIT_HASH}\"")
     endif()
+
+    # belt: bake the commit timestamp (YYYY_MM_DD_HH_MM) so every build is
+    # uniquely identifiable in the About dialog and crash reports. The static
+    # SoftFever_VERSION ("2.3.2-dev") is the same for every nightly, which made
+    # it impossible for testers to tell whether they were running a build that
+    # contained a given fix. Derived from the commit date (deterministic, tied
+    # to the code) of the same ref used for GIT_COMMIT_HASH.
+    if(DEFINED ENV{git_commit_hash} AND NOT "$ENV{git_commit_hash}" STREQUAL "")
+        set(_orcabelt_build_ref "$ENV{git_commit_hash}")
+    else()
+        set(_orcabelt_build_ref "HEAD")
+    endif()
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} show -s --format=%cd --date=format:%Y_%m_%d_%H_%M ${_orcabelt_build_ref}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE ORCABELT_BUILD_TIMESTAMP
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    add_definitions("-DORCABELT_BUILD_TIMESTAMP=\"${ORCABELT_BUILD_TIMESTAMP}\"")
 endif()
 
 if(DEFINED ENV{SLIC3R_STATIC})

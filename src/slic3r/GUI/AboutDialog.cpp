@@ -244,7 +244,12 @@ AboutDialog::AboutDialog()
         vesizer->Add(0, 0, 1, wxEXPAND, FromDIP(5));
         auto          version_string = std::string(SoftFever_VERSION); // _L("Orca Slicer ") + " " + std::string(SoftFever_VERSION);
         wxStaticText* version = new wxStaticText(this, wxID_ANY, version_string.c_str(), wxDefaultPosition, wxDefaultSize);
-        wxStaticText* credits_string = new wxStaticText(this, wxID_ANY, wxString::Format("Build %s", std::string(GIT_COMMIT_HASH)), wxDefaultPosition, wxDefaultSize);
+        // belt: show the commit timestamp next to the hash so testers can tell
+        // exactly which build they run (SoftFever_VERSION is static across nightlies).
+        std::string build_str = std::string("Build ") + GIT_COMMIT_HASH;
+        if (std::string(ORCABELT_BUILD_TIMESTAMP).size() > 0)
+            build_str += std::string(" (") + ORCABELT_BUILD_TIMESTAMP + ")";
+        wxStaticText* credits_string = new wxStaticText(this, wxID_ANY, wxString::FromUTF8(build_str), wxDefaultPosition, wxDefaultSize);
         credits_string->SetFont(_build_string_font);
         wxFont version_font = GetFont();
         #ifdef __WXMSW__

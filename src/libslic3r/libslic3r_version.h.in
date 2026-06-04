@@ -8,6 +8,9 @@
 #ifndef GIT_COMMIT_HASH
     #define GIT_COMMIT_HASH "0000000" // 0000000 means uninitialized
 #endif
+#ifndef ORCABELT_BUILD_TIMESTAMP
+    #define ORCABELT_BUILD_TIMESTAMP "" // set by CMake from the commit date (YYYY_MM_DD_HH_MM)
+#endif
 #define SLIC3R_BUILD_ID "@SLIC3R_BUILD_ID@"
 //#define SLIC3R_RC_VERSION "@SLIC3R_VERSION@"
 #define BBL_INTERNAL_TESTING @BBL_INTERNAL_TESTING@

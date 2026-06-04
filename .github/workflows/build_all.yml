@@ -213,6 +213,16 @@ jobs:
       - name: Get the version
         run: echo "ver=V$(grep 'set(SoftFever_VERSION' version.inc | cut -d '"' -f2)" >> $GITHUB_ENV
         shell: bash
+      - name: Get build id
+        # YYYY_MM_DD_HH_MM from the head commit timestamp — identical to the value
+        # baked into the binary (CMake -DORCABELT_BUILD_TIMESTAMP, shown in
+        # Help -> About). SoftFever_VERSION is static across nightlies, so this is
+        # what lets testers confirm exactly which build they run.
+        run: |
+          ts="${{ github.event.head_commit.timestamp }}"
+          if [ -n "$ts" ]; then bid=$(date -u -d "$ts" +%Y_%m_%d_%H_%M); else bid=$(date -u +%Y_%m_%d_%H_%M); fi
+          echo "build_id=${bid}" >> "$GITHUB_ENV"
+        shell: bash
       - name: Download all build artifacts
         uses: actions/download-artifact@v6
         with:
@@ -234,19 +244,46 @@ jobs:
           cp artifacts/ShidaoSlicer_Linux_*/*.AppImage release/ 2>/dev/null || true
           # Flatpak bundles (only if the flatpak job happened to succeed)
           cp artifacts/OrcaSlicer-Linux-flatpak_*/*.flatpak release/ 2>/dev/null || true
+          # belt: keep the stable _${ver} names (fixed campaign download link) AND
+          # add a build-id-stamped copy of each, so a downloaded file is itself
+          # self-identifying. Stale stamped assets are pruned in the next step.
+          ( cd release
+            for f in *; do
+              [ -f "$f" ] || continue
+              case "$f" in *_"${build_id}".*) continue ;; esac
+              base="${f%.*}"; ext="${f##*.}"
+              cp -- "$f" "${base}_${build_id}.${ext}"
+            done )
           echo "=== release/ ==="; ls -lh release/
+        shell: bash
+      - name: Prune previous build-id assets from nightly
+        # The stable _${ver} assets are overwritten in place by the publish step;
+        # the build-id-stamped ones have a unique name each run, so delete the old
+        # stamped ones here to stop the rolling release from accumulating them.
+        run: |
+          gh release view nightly --repo "${{ github.repository }}" --json assets \
+            -q '.assets[].name' 2>/dev/null \
+            | grep -E '_20[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}\.' \
+            | while read -r a; do
+                echo "deleting stale stamped asset: $a"
+                gh release delete-asset nightly "$a" --repo "${{ github.repository }}" -y || true
+              done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
       - name: Publish to rolling nightly release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: nightly
           target_commitish: ${{ github.sha }}
-          name: "ShidaoSlicer Nightly (${{ env.ver }})"
+          name: "ShidaoSlicer Nightly — build ${{ env.build_id }} (${{ env.ver }})"
           prerelease: true
           fail_on_unmatched_files: false
           files: release/*
           body: |
             Rolling nightly build from the latest `main` (commit ${{ github.sha }}).
+
+            **Build `${{ env.build_id }}`** — confermalo in app: Help → About, riga `Build <hash> (${{ env.build_id }})`.
 
             ShidaoSlicer — fork di OrcaSlicer con supporto nativo per stampanti **belt / nastro** (45° inclinato, stile CR-30 / IdeaFormer IR3).
 
