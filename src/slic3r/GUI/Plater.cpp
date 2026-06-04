@@ -7721,6 +7721,32 @@ bool Plater::priv::restart_background_process(unsigned int state)
         return false;
     }
 
+    // belt/Windows: this is the SINGLE chokepoint every G-code-producing path
+    // funnels through — interactive reslice(), "Export G-code", send-to-printer,
+    // and the per-plate reslice variants all reach the slicing thread via
+    // background_process.start() below. That thread writes the new G-code to the
+    // plate's *stable* temp path (PartPlate::get_tmp_gcode_path(), reused across
+    // re-slices of the same plate) and finishes with a tmp->final rename in
+    // GCode::export() (src/libslic3r/GCode.cpp). On Windows a file that is still
+    // memory-mapped is locked against rename, so if either canvas's G-code text
+    // window (GCodeViewer::SequentialView::GCodeWindow, a boost mapped_file_source
+    // opened WITHOUT FILE_SHARE_DELETE) still maps the previous slice of that same
+    // path, the rename fails with "Failed to rename the output G-code ... locked".
+    // The earlier fix only released the PREVIEW canvas mapping and only on the
+    // reslice() path, missing the VIEW3D canvas and the export/upload paths. Drop
+    // BOTH mappings here, right before the slicing thread starts, so every path is
+    // covered. We only drop the file text mapping (not the 3D toolpaths), so the
+    // belt preview stays on screen with no flicker. No-op on Linux (rename over a
+    // mapped file is allowed there) and harmless when nothing is mapped.
+    auto belt_release_all_gcode_mappings = [this]() {
+        if (this->view3D)
+            if (GLCanvas3D* c = this->view3D->get_canvas3d())
+                c->release_gcode_file_mapping();
+        if (this->preview)
+            if (GLCanvas3D* c = this->preview->get_canvas3d())
+                c->release_gcode_file_mapping();
+    };
+
     if ( ! this->background_process.empty() &&
          (state & priv::UPDATE_BACKGROUND_PROCESS_INVALID) == 0 &&
          ( ((state & UPDATE_BACKGROUND_PROCESS_FORCE_RESTART) != 0 && ! this->background_process.finished()) ||
@@ -7728,6 +7754,7 @@ bool Plater::priv::restart_background_process(unsigned int state)
            (state & UPDATE_BACKGROUND_PROCESS_RESTART) != 0 ) ) {
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(", Line %1%: print is valid, try to start it now")%__LINE__;
         // The print is valid and it can be started.
+        belt_release_all_gcode_mappings();
         if (this->background_process.start()) {
             if (!show_warning_dialog)
                 on_slicing_began();
@@ -7738,6 +7765,7 @@ bool Plater::priv::restart_background_process(unsigned int state)
     else if (this->background_process.empty()) {
         PartPlate* cur_plate = background_process.get_current_plate();
         if (cur_plate->is_slice_result_valid() && ((state & UPDATE_BACKGROUND_PROCESS_FORCE_RESTART) != 0)) {
+            belt_release_all_gcode_mappings();
             if (this->background_process.start()) {
                 if (!show_warning_dialog)
                     on_slicing_began();
